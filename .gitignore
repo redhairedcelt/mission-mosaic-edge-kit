@@ -1,0 +1,8 @@
+current-release.json
+released/*
+!released/.gitkeep
+workspace/*
+!workspace/README.md
+workspace/.tools/
+.DS_Store
+*.tmp-*
