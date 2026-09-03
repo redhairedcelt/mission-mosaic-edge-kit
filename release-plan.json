@@ -1,6 +1,6 @@
 {
   "format": "mission-mosaic-release-plan-v1",
-  "packageVersion": "1.0.1",
+  "packageVersion": "1.0.2",
   "scenario": "Aster Shield",
   "releases": [
     {

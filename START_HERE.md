@@ -27,6 +27,42 @@ Codex runs the same cross-platform Node.js utility on Windows and macOS. A
 successful unlock decrypts and verifies the next release locally, updates
 `current-release.json`, and reports the active read-only database path.
 
+## Manual operations
+
+Run these commands from the root of the extracted release asset. Node.js 20 or
+newer is required for release verification and unlocking.
+
+```sh
+node tools/mosaic-release.mjs verify
+node tools/mosaic-release.mjs status
+node tools/mosaic-release.mjs unlock WORD
+```
+
+If `verify` identifies a public source checkout, stop and download the
+versioned release asset. Do not try to construct missing package files from the
+source tree.
+
+Open the current database read-only on macOS:
+
+```sh
+sh tools/open_current_readonly.sh
+```
+
+Open it read-only on Windows:
+
+```powershell
+.\tools\open_current_readonly.ps1
+```
+
+To create or reopen an editable copy under `workspace/`, use
+`sh tools/new_working_database.sh` on macOS or
+`.\tools\new_working_database.ps1` on Windows.
+
+Save applications, SQL, reports, charts, and working databases under
+`workspace/`. The unlocked release directories are immutable source material.
+Run `node tools/mosaic-release.mjs verify` again if the extracted kit is moved,
+copied, or reopened later; it also checks the active release when one exists.
+
 ## What happens at each transition
 
 | Role | Action |

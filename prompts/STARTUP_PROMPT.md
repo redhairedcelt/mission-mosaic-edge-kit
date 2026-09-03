@@ -1,5 +1,7 @@
 # Copy/paste this into a new local Codex task
 
+> **FOR TRAINING PURPOSES ONLY — SYNTHETIC DATA**
+
 Read `AGENTS.md`, `START_HERE.md`, `RELEASE_SCHEDULE.md`, `DATA_GUIDE.md`, and
 `EXCLUSIONS.md`. Run `node tools/mosaic-release.mjs verify`, then run
 `node tools/mosaic-release.mjs status --json`. Stop if verification fails.

@@ -43,49 +43,7 @@ DuckDB tools, and all four encrypted release packages.
 The utility accepts release words case-insensitively. It only attempts the
 next release, so it cannot skip forward or move backward.
 
-## Direct commands
-
-Run these commands from the root of the extracted release asset. Node.js 20 or
-newer is required for release verification and unlocking.
-
-```sh
-node tools/mosaic-release.mjs verify
-node tools/mosaic-release.mjs status
-node tools/mosaic-release.mjs unlock WORD
-```
-
-If `verify` identifies a public source checkout, stop and download the
-versioned release asset. Do not try to construct missing package files from the
-source tree.
-
-Open the current database read-only on macOS:
-
-```sh
-sh tools/open_current_readonly.sh
-```
-
-Open it read-only on Windows:
-
-```powershell
-.\tools\open_current_readonly.ps1
-```
-
-To create or reopen an editable copy under `workspace/`, use
-`sh tools/new_working_database.sh` on macOS or
-`.\tools\new_working_database.ps1` on Windows.
-
-Save applications, SQL, reports, charts, and working databases under
-`workspace/`. The unlocked release directories are immutable source material.
-Run `node tools/mosaic-release.mjs verify` again if the extracted kit is moved,
-copied, or reopened later; it also checks the active release when one exists.
-
-## Releases
-
-- `REL-AST-01`: cumulative participant evidence through H0.
-- `REL-AST-02`: cumulative participant evidence through H+48.
-- `REL-AST-03`: cumulative participant evidence through H+72.
-- `H120`: cumulative participant-safe evidence for continued analysis after
-  the facilitated outbrief.
-
-See `RELEASE_SCHEDULE.md`, `DATA_GUIDE.md`, and `EXCLUSIONS.md` for the exact
+For verification, unlock, read-only database, and writable workspace commands,
+continue with [`START_HERE.md`](START_HERE.md). The release schedule, data
+guide, and exclusions documents define the exact evidence and safety
 boundaries.
