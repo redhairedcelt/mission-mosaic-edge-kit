@@ -8,7 +8,11 @@ is available.
 
 1. Read `START_HERE.md`, `RELEASE_SCHEDULE.md`, `DATA_GUIDE.md`, and
    `EXCLUSIONS.md`.
-2. Run `node tools/mosaic-release.mjs verify`. Stop and report any failure.
+2. Run `node tools/mosaic-release.mjs verify`. Stop and report any failure. If
+   the checksum manifest is absent, explain that this is the public source
+   checkout rather than the complete release package and direct the analyst to
+   this repository's Releases page. Do not describe that expected source-tree
+   condition as kit corruption.
 3. Run `node tools/mosaic-release.mjs status --json` before using scenario
    evidence and whenever the participant says the release changed.
 4. If no release is active, use the plaintext reference library only. Do not

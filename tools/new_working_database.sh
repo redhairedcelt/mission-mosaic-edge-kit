@@ -22,7 +22,11 @@ working="$workspace/$name"
 mkdir -p "$workspace"
 
 if [ ! -f "$working" ]; then
-    cp -p "$master" "$working"
+    temporary="$working.tmp-$$"
+    trap 'rm -f "$temporary"' EXIT HUP INT TERM
+    cp -p "$master" "$temporary"
+    mv "$temporary" "$working"
+    trap - EXIT HUP INT TERM
     printf 'Created working database: %s\n' "$working"
 else
     printf 'Reusing existing working database: %s\n' "$working"

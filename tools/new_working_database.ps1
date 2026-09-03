@@ -27,7 +27,16 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $master -PathType Leaf)
 
 New-Item -ItemType Directory -Force -Path $workspace | Out-Null
 if (-not (Test-Path -LiteralPath $working -PathType Leaf)) {
-    Copy-Item -LiteralPath $master -Destination $working
+    $temporary = "$working.tmp-$PID"
+    try {
+        Copy-Item -LiteralPath $master -Destination $temporary
+        Move-Item -LiteralPath $temporary -Destination $working
+    }
+    finally {
+        if (Test-Path -LiteralPath $temporary) {
+            Remove-Item -LiteralPath $temporary -Force
+        }
+    }
     Write-Host "Created working database: $working" -ForegroundColor Green
 }
 else {

@@ -1,5 +1,7 @@
 # Content boundary
 
+> **FOR TRAINING PURPOSES ONLY — SYNTHETIC DATA**
+
 This participant kit contains encrypted evidence releases and enduring
 participant-safe references. It does not contain:
 

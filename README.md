@@ -1,6 +1,6 @@
 # Mission Mosaic encrypted participant Edge Kit
 
-> **FOR TRAINING PURPOSES ONLY - SYNTHETIC DATA**
+> **FOR TRAINING PURPOSES ONLY — SYNTHETIC DATA**
 
 This offline kit lets a participant build and run local analytical tools while
 the Aster Shield evidence advances through four facilitator-controlled
@@ -13,10 +13,14 @@ ground truth, inject controls, scoring material, or answer products.
 
 ## Download
 
-Open this repository's **Releases** page and download the current
+Open this repository's [**Releases** page](https://github.com/redhairedcelt/mission-mosaic-edge-kit/releases/latest) and download the current
 `mission-mosaic-edge-kit-*.zip` asset. Do not use GitHub's automatically
 generated source-code archives; they contain the documentation but not the
 packaged encrypted data and platform tools.
+
+A clone or source-code ZIP of this repository is publication documentation,
+not a runnable kit. Its verification command deliberately directs users back
+to the packaged release asset when the checksum manifest is absent.
 
 Extract the ZIP to a normal writable folder. Keep the entire folder together.
 The ZIP contains the participant-safe reference library, Windows and macOS
@@ -41,13 +45,18 @@ next release, so it cannot skip forward or move backward.
 
 ## Direct commands
 
-Node.js 20 or newer is required for release verification and unlocking.
+Run these commands from the root of the extracted release asset. Node.js 20 or
+newer is required for release verification and unlocking.
 
 ```sh
 node tools/mosaic-release.mjs verify
 node tools/mosaic-release.mjs status
 node tools/mosaic-release.mjs unlock WORD
 ```
+
+If `verify` identifies a public source checkout, stop and download the
+versioned release asset. Do not try to construct missing package files from the
+source tree.
 
 Open the current database read-only on macOS:
 
@@ -67,6 +76,8 @@ To create or reopen an editable copy under `workspace/`, use
 
 Save applications, SQL, reports, charts, and working databases under
 `workspace/`. The unlocked release directories are immutable source material.
+Run `node tools/mosaic-release.mjs verify` again if the extracted kit is moved,
+copied, or reopened later; it also checks the active release when one exists.
 
 ## Releases
 

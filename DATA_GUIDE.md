@@ -1,5 +1,7 @@
 # Data guide
 
+> **FOR TRAINING PURPOSES ONLY — SYNTHETIC DATA**
+
 The active release is recorded in `current-release.json`. Always run:
 
 ```sh

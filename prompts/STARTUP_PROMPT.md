@@ -3,6 +3,8 @@
 Read `AGENTS.md`, `START_HERE.md`, `RELEASE_SCHEDULE.md`, `DATA_GUIDE.md`, and
 `EXCLUSIONS.md`. Run `node tools/mosaic-release.mjs verify`, then run
 `node tools/mosaic-release.mjs status --json`. Stop if verification fails.
+If verification says this is the public source checkout, direct me to the
+repository's Releases page; do not report the missing package files as damage.
 
 Use only the active release reported by the local release utility. If no
 release is active, use the plaintext reference library only and wait for a

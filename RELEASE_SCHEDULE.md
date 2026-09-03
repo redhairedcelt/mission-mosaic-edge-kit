@@ -1,6 +1,6 @@
 # Aster Shield offline release schedule
 
-> **FOR TRAINING PURPOSES ONLY - SYNTHETIC DATA**
+> **FOR TRAINING PURPOSES ONLY — SYNTHETIC DATA**
 
 | Release | Scenario cutoff | Availability |
 |---|---:|---|
