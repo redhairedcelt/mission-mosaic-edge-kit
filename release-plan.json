@@ -1,30 +1,25 @@
 {
   "format": "mission-mosaic-release-plan-v1",
-  "packageVersion": "1.0.2",
+  "packageVersion": "2.0.3",
   "scenario": "Aster Shield",
+  "initialActiveReleaseId": "REL-AST-01",
   "releases": [
     {
       "id": "REL-AST-01",
       "number": 1,
-      "label": "Inherit the problem",
+      "label": "H0 baseline",
       "cutoffHour": 0
     },
     {
       "id": "REL-AST-02",
       "number": 2,
-      "label": "Operational update",
-      "cutoffHour": 48
+      "label": "H+72 decision update",
+      "cutoffHour": 72
     },
     {
       "id": "REL-AST-03",
       "number": 3,
-      "label": "Final participant update",
-      "cutoffHour": 72
-    },
-    {
-      "id": "H120",
-      "number": 4,
-      "label": "Continued analysis after the outbrief",
+      "label": "H+120 outcome update",
       "cutoffHour": 120
     }
   ]

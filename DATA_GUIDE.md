@@ -21,8 +21,9 @@ to the current cumulative release under `released/`.
 - Canonical entities, facilities, leadership, military commands, units,
   platforms, capabilities, naval hulls, emitters, and source registries
 
-The H120 release adds the complete participant-safe raw corpus for continued
-analysis. It remains encrypted until the facilitator authorizes that release.
+The H120 outcome update adds the complete participant-safe raw corpus for the
+final application refresh. It remains encrypted until the facilitator
+authorizes that update. It does not contain facilitator ground truth.
 
 ## Time fields
 

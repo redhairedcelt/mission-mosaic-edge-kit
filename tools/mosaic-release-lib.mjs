@@ -16,6 +16,7 @@ import {
   readdirSync,
   renameSync,
   rmSync,
+  statfsSync,
   statSync,
   writeFileSync,
   writeSync,
@@ -32,9 +33,8 @@ export const STATE_FORMAT = "mission-mosaic-active-release-v1";
 export const ARCHIVE_MAGIC = Buffer.from("MOSAIC_ARCHIVE_V1\n", "ascii");
 export const EXPECTED_RELEASES = Object.freeze([
   Object.freeze({ id: "REL-AST-01", number: 1, cutoffHour: 0 }),
-  Object.freeze({ id: "REL-AST-02", number: 2, cutoffHour: 48 }),
-  Object.freeze({ id: "REL-AST-03", number: 3, cutoffHour: 72 }),
-  Object.freeze({ id: "H120", number: 4, cutoffHour: 120 }),
+  Object.freeze({ id: "REL-AST-02", number: 2, cutoffHour: 72 }),
+  Object.freeze({ id: "REL-AST-03", number: 3, cutoffHour: 120 }),
 ]);
 
 const DEFAULT_KIT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -42,6 +42,16 @@ const ARCHIVE_FORMAT = "mission-mosaic-stream-v1";
 const CIPHER = "aes-256-gcm";
 const COMPRESSION = "gzip";
 const EXPECTED_KDF = Object.freeze({ name: "scrypt", N: 32768, r: 8, p: 1, keyLength: 32 });
+const RETRYABLE_FILESYSTEM_ERRORS = new Set(["EACCES", "EBUSY", "EEXIST", "ENOTEMPTY", "EPERM"]);
+const LOCAL_WRITE_ERRORS = new Set([
+  ...RETRYABLE_FILESYSTEM_ERRORS,
+  "EDQUOT",
+  "EMFILE",
+  "ENFILE",
+  "ENOSPC",
+  "ENAMETOOLONG",
+  "EROFS",
+]);
 const PROTECTED_PATH = /(^|\/)(facilitator|facilitation|control|ground[_ -]?truth|adjudication|answer[_ -]?keys?|hidden[_ -]?intent|release[_ -]?words?|scoring)([_ .-]|\/|$)/i;
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
 const REQUIRED_BASE_FILES = Object.freeze([
@@ -50,6 +60,7 @@ const REQUIRED_BASE_FILES = Object.freeze([
   "DATA_GUIDE.md",
   "EXCLUSIONS.md",
   "README.md",
+  "PREFLIGHT.md",
   "RELEASE_SCHEDULE.md",
   "START_HERE.md",
   "data/reference/asset_catalog.json",
@@ -67,8 +78,52 @@ const REQUIRED_BASE_FILES = Object.freeze([
   "tools/new_working_database.sh",
   "tools/open_current_readonly.ps1",
   "tools/open_current_readonly.sh",
+  "tools/test_release_decryption.ps1",
+  "tools/test_release_decryption.sh",
   "workspace/README.md",
 ]);
+
+const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+
+function waitMilliseconds(milliseconds) {
+  Atomics.wait(waitBuffer, 0, 0, milliseconds);
+}
+
+export function retryTransientFileOperation(operation, {
+  attempts = 8,
+  retryDelayMs = 125,
+  wait = waitMilliseconds,
+} = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return operation();
+    } catch (error) {
+      lastError = error;
+      if (!RETRYABLE_FILESYSTEM_ERRORS.has(error?.code) || attempt === attempts) throw error;
+      wait(retryDelayMs * attempt);
+    }
+  }
+  throw lastError;
+}
+
+export async function retryTransientAsyncOperation(operation, {
+  attempts = 4,
+  retryDelayMs = 250,
+  wait = waitMilliseconds,
+} = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (!RETRYABLE_FILESYSTEM_ERRORS.has(error?.code) || attempt === attempts) throw error;
+      wait(retryDelayMs * attempt);
+    }
+  }
+  throw lastError;
+}
 
 function kitPaths(kitRoot) {
   const root = resolve(kitRoot);
@@ -102,7 +157,7 @@ export function validatePlan(value) {
     throw new Error("The release plan package version is invalid.");
   }
   if (!Array.isArray(value.releases) || value.releases.length !== EXPECTED_RELEASES.length) {
-    throw new Error("The release plan must contain the four expected releases.");
+    throw new Error("The release plan must contain the three expected releases.");
   }
   const seen = new Set();
   value.releases.forEach((release, index) => {
@@ -117,6 +172,9 @@ export function validatePlan(value) {
     if (seen.has(release.id)) throw new Error(`Duplicate release identifier: ${release.id}`);
     seen.add(release.id);
   });
+  if (value.initialActiveReleaseId !== value.releases[0].id) {
+    throw new Error("The release plan must activate the H0 baseline initially.");
+  }
   return value;
 }
 
@@ -378,7 +436,7 @@ export async function verifyPackagedFiles(kitRoot = DEFAULT_KIT_ROOT) {
   const entries = parseChecksumLines(readFileSync(paths.manifest, "utf8"), "kit checksum manifest");
   const required = [
     ...REQUIRED_BASE_FILES,
-    ...releasePlan.releases.flatMap((release) => [`sealed/${release.id}.json`, `sealed/${release.id}.mosaic`]),
+    ...releasePlan.releases.slice(1).flatMap((release) => [`sealed/${release.id}.json`, `sealed/${release.id}.mosaic`]),
   ];
   for (const portablePath of required) {
     if (!entries.has(portablePath)) throw new Error(`Kit checksum manifest omits required file: ${portablePath}`);
@@ -386,13 +444,19 @@ export async function verifyPackagedFiles(kitRoot = DEFAULT_KIT_ROOT) {
   const actual = walkFiles(paths.root, { ignoreGenerated: true });
   assertExactFileSet(actual, entries, "Kit checksum manifest");
   await verifyChecksumEntries(paths.root, entries, "Kit checksum manifest");
-  for (const release of releasePlan.releases) await validateReleaseMetadata(paths, release, releasePlan);
+  for (const release of releasePlan.releases.slice(1)) await validateReleaseMetadata(paths, release, releasePlan);
 
   const current = readState(paths, releasePlan);
+  if (!current) throw new Error("The packaged Edge Kit must start with the H0 baseline active.");
   const directories = releasedDirectories(paths);
   const allowed = new Set(current ? releasePlan.releases.slice(0, current.release.number).map((release) => release.id) : []);
   const unexpected = directories.filter((name) => !allowed.has(name));
-  if (unexpected.length) throw new Error("The released directory contains an incomplete or unauthorized release. Retry the authorized unlock or restore the kit.");
+  if (unexpected.length) {
+    throw new Error(
+      "The released directory contains an interrupted or unauthorized release. " +
+      "Run `node tools/mosaic-release.mjs repair`, then retry verification or the same authorized unlock.",
+    );
+  }
   let activeFiles = 0;
   if (current) {
     const activeRoot = join(paths.released, current.release.id);
@@ -400,6 +464,51 @@ export async function verifyPackagedFiles(kitRoot = DEFAULT_KIT_ROOT) {
     activeFiles = verified.checked;
   }
   return { packagedFiles: entries.size, activeFiles };
+}
+
+function removePathWithRetries(path, { strict = false } = {}) {
+  try {
+    rmSync(path, { recursive: true, force: true, maxRetries: 8, retryDelay: 125 });
+  } catch (error) {
+    if (strict) throw error;
+  }
+  if (strict && existsSync(path)) throw new Error(`Could not remove temporary path: ${path}`);
+}
+
+function renameWithRetries(source, destination) {
+  return retryTransientFileOperation(() => renameSync(source, destination));
+}
+
+function temporaryStatePaths(paths) {
+  const prefix = "current-release.json.tmp-";
+  return readdirSync(paths.root, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.startsWith(prefix))
+    .map((entry) => join(paths.root, entry.name));
+}
+
+function stagingPaths(paths) {
+  if (!existsSync(paths.released)) return [];
+  return readdirSync(paths.released, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^\.staging-REL-AST-\d{2}-\d+(?:-\d+)?$/.test(entry.name))
+    .map((entry) => join(paths.released, entry.name));
+}
+
+function preflightPaths(paths) {
+  const workspace = join(paths.root, "workspace");
+  if (!existsSync(workspace)) return [];
+  return readdirSync(workspace, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^\.release-preflight-\d+-\d+$/.test(entry.name))
+    .map((entry) => join(workspace, entry.name));
+}
+
+function cleanRecoverableTemporaryPaths(paths, { includePreflight = true } = {}) {
+  const candidates = [
+    ...temporaryStatePaths(paths),
+    ...stagingPaths(paths),
+    ...(includePreflight ? preflightPaths(paths) : []),
+  ];
+  for (const candidate of candidates) removePathWithRetries(candidate, { strict: true });
+  return candidates.length;
 }
 
 function writeState(paths, releasePlan, release, internal) {
@@ -415,10 +524,14 @@ function writeState(paths, releasePlan, release, internal) {
     unlockedAt: new Date().toISOString(),
   };
   validateState(newState, releasePlan, paths, { requireFiles: true });
-  const temporaryState = `${paths.state}.tmp-${process.pid}`;
-  rmSync(temporaryState, { force: true });
-  writeFileSync(temporaryState, `${JSON.stringify(newState, null, 2)}\n`, { mode: 0o600, flag: "wx" });
-  renameSync(temporaryState, paths.state);
+  const temporaryState = `${paths.state}.tmp-${process.pid}-${Date.now()}`;
+  removePathWithRetries(temporaryState, { strict: true });
+  try {
+    writeFileSync(temporaryState, `${JSON.stringify(newState, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+    renameWithRetries(temporaryState, paths.state);
+  } finally {
+    removePathWithRetries(temporaryState);
+  }
   return newState;
 }
 
@@ -430,37 +543,172 @@ function reportActivation(release, newState, checked, recovered = false) {
 }
 
 function removeStaging(path) {
-  try {
-    rmSync(path, { recursive: true, force: true });
-  } catch {
-    // Preserve the primary error. A later verify reports any leftover staging directory.
-  }
+  removePathWithRetries(path, { strict: true });
 }
 
 function isLocalWriteFailure(error) {
-  return new Set(["EACCES", "EDQUOT", "EMFILE", "ENFILE", "ENOSPC", "EPERM", "EROFS"]).has(error?.code);
+  return LOCAL_WRITE_ERRORS.has(error?.code);
+}
+
+function releaseOperationError(message, { recoverable = false, cause } = {}) {
+  const error = new Error(message, cause ? { cause } : undefined);
+  error.releaseRecoverable = recoverable;
+  return error;
+}
+
+function facilitatorAssistanceError(error) {
+  if (/flag this for a facilitator/i.test(error.message)) return error;
+  return new Error(`${error.message} Please flag this for a facilitator.`, { cause: error });
+}
+
+export async function runWithAutomaticReleaseRecovery(operation, repair, {
+  wait = () => waitMilliseconds(500),
+} = {}) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error?.releaseRecoverable !== true && !isLocalWriteFailure(error)) {
+      throw facilitatorAssistanceError(error);
+    }
+    console.error("The release encountered a recoverable local error. Running one automatic repair and retry.");
+    try {
+      wait();
+      await repair();
+      const result = await operation();
+      console.log("Automatic release recovery completed successfully.");
+      return result;
+    } catch (recoveryError) {
+      throw facilitatorAssistanceError(recoveryError);
+    }
+  }
 }
 
 export async function unlockRelease(word, kitRoot = DEFAULT_KIT_ROOT) {
-  if (!word || !/^[A-Za-z]+$/.test(word)) throw new Error("A release word must contain letters only.");
+  if (!word || !/^[A-Z]+$/.test(word)) {
+    throw facilitatorAssistanceError(new Error("A release word must use uppercase letters exactly as displayed."));
+  }
+  return runWithAutomaticReleaseRecovery(
+    () => unlockReleaseAttempt(word, kitRoot),
+    () => repairReleaseWorkspace(kitRoot),
+  );
+}
+
+async function unlockReleaseAttempt(word, kitRoot) {
   const paths = kitPaths(kitRoot);
   const releasePlan = readPlan(paths);
   const current = readState(paths, releasePlan);
   const release = nextRelease(releasePlan, current);
   if (!release) {
-    console.log("All four participant releases are already unlocked.");
+    console.log("All participant releases are already unlocked.");
     return;
+  }
+  try {
+    cleanRecoverableTemporaryPaths(paths, { includePreflight: false });
+  } catch (error) {
+    throw releaseOperationError(`Temporary release cleanup was blocked: ${error.message}`, {
+      recoverable: isLocalWriteFailure(error),
+      cause: error,
+    });
   }
   const target = join(paths.released, release.id);
   if (existsSync(target)) {
-    const recovered = await verifyReleaseDirectory(target, release);
-    const newState = writeState(paths, releasePlan, release, recovered.internal);
+    try {
+      await authenticateReleaseWord(word, paths, releasePlan, release);
+    } catch (error) {
+      if (isLocalWriteFailure(error)) {
+        throw releaseOperationError(`The recoverable release could not be read locally: ${error.message}`, {
+          recoverable: true,
+          cause: error,
+        });
+      }
+      throw releaseOperationError(
+        `The release word was not accepted for the recoverable release (${release.id}), or its package is damaged.`,
+        { cause: error },
+      );
+    }
+    let recovered;
+    try {
+      recovered = await verifyReleaseDirectory(target, release);
+    } catch (error) {
+      throw releaseOperationError(`The recoverable release could not be verified: ${error.message}`, {
+        recoverable: isLocalWriteFailure(error),
+        cause: error,
+      });
+    }
+    let newState;
+    try {
+      newState = writeState(paths, releasePlan, release, recovered.internal);
+    } catch (error) {
+      throw releaseOperationError(`The verified release could not be activated: ${error.message}`, {
+        recoverable: true,
+        cause: error,
+      });
+    }
     reportActivation(release, newState, recovered.checked, true);
     return;
   }
 
+  const staging = join(paths.released, `.staging-${release.id}-${process.pid}-${Date.now()}`);
+  let phase = "prepare";
+  try {
+    mkdirSync(paths.released, { recursive: true });
+    removePathWithRetries(staging, { strict: true });
+    mkdirSync(staging, { recursive: true });
+    phase = "decrypt";
+    await decryptRelease(word, paths, releasePlan, release, staging);
+    phase = "validate";
+    const verified = await verifyReleaseDirectory(staging, release);
+    phase = "activate";
+    renameWithRetries(staging, target);
+    const newState = writeState(paths, releasePlan, release, verified.internal);
+    reportActivation(release, newState, verified.checked);
+  } catch (error) {
+    let cleanupError = null;
+    try {
+      removeStaging(staging);
+    } catch (candidate) {
+      cleanupError = candidate;
+    }
+    if (process.env.MOSAIC_RELEASE_DEBUG === "1") console.error(error.stack ?? error.message);
+    if (cleanupError) {
+      throw releaseOperationError(
+        `Temporary extraction cleanup was blocked: ${cleanupError.message}`,
+        { recoverable: true, cause: cleanupError },
+      );
+    }
+    if (isLocalWriteFailure(error)) {
+      const code = error.code ? ` (${error.code})` : "";
+      throw releaseOperationError(
+        `The release could not be written locally${code}: ${error.message} ` +
+        "Local security, indexing, synchronization, disk space, or path length may be blocking it.",
+        { recoverable: true, cause: error },
+      );
+    }
+    if (phase === "decrypt") {
+      throw releaseOperationError(
+        `The release word was not accepted for the next release (${release.id}), or its package is damaged.`,
+        { cause: error },
+      );
+    }
+    if (phase === "activate") {
+      throw releaseOperationError(`The release was decrypted but activation did not finish: ${error.message}`, {
+        recoverable: true,
+        cause: error,
+      });
+    }
+    if (phase === "prepare") {
+      throw releaseOperationError(`The release staging area could not be prepared: ${error.message}`, {
+        recoverable: true,
+        cause: error,
+      });
+    }
+    throw releaseOperationError(`The decrypted release failed validation: ${error.message}`, { cause: error });
+  }
+}
+
+async function releaseDecipher(word, paths, releasePlan, release) {
   const { metadata, cipherPath, salt, iv, authTag, aad } = await validateReleaseMetadata(paths, release, releasePlan);
-  const key = scryptSync(word.toUpperCase(), salt, metadata.kdf.keyLength, {
+  const key = scryptSync(word, salt, metadata.kdf.keyLength, {
     N: metadata.kdf.N,
     r: metadata.kdf.r,
     p: metadata.kdf.p,
@@ -469,32 +717,181 @@ export async function unlockRelease(word, kitRoot = DEFAULT_KIT_ROOT) {
   const decipher = createDecipheriv(metadata.cipher, key, iv);
   decipher.setAAD(aad);
   decipher.setAuthTag(authTag);
-  mkdirSync(paths.released, { recursive: true });
-  const staging = join(paths.released, `.staging-${release.id}-${process.pid}`);
-  removeStaging(staging);
-  mkdirSync(staging, { recursive: true });
-  const extractor = new ArchiveExtractor(staging);
-  let phase = "decrypt";
+  return { cipherPath, decipher };
+}
+
+async function authenticateReleaseWord(word, paths, releasePlan, release) {
+  const { cipherPath, decipher } = await releaseDecipher(word, paths, releasePlan, release);
+  const discard = new Writable({
+    write(_chunk, _encoding, callback) {
+      callback();
+    },
+  });
+  await pipeline(createReadStream(cipherPath), decipher, discard);
+}
+
+async function decryptRelease(word, paths, releasePlan, release, destination) {
+  const { cipherPath, decipher } = await releaseDecipher(word, paths, releasePlan, release);
+  const extractor = new ArchiveExtractor(destination);
+  await pipeline(createReadStream(cipherPath), decipher, createGunzip(), extractor);
+  return {
+    extractedFiles: extractor.files,
+    extractedBytes: extractor.bytes,
+    longestDestination: extractor.longestDestination,
+  };
+}
+
+function formatMebibytes(bytes) {
+  return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+}
+
+function filesystemWriteProbe(paths) {
+  const probe = join(paths.root, `.mosaic-write-probe-${process.pid}-${Date.now()}`);
+  const source = `${probe}.new`;
+  const destination = `${probe}.current`;
   try {
-    await pipeline(createReadStream(cipherPath), decipher, createGunzip(), extractor);
-    phase = "validate";
-    const verified = await verifyReleaseDirectory(staging, release);
-    phase = "activate";
-    renameSync(staging, target);
-    const newState = writeState(paths, releasePlan, release, verified.internal);
-    reportActivation(release, newState, verified.checked);
-  } catch (error) {
-    removeStaging(staging);
-    if (process.env.MOSAIC_RELEASE_DEBUG === "1") console.error(error.stack ?? error.message);
-    if (isLocalWriteFailure(error)) throw new Error(`The release could not be written locally: ${error.message}`);
-    if (phase === "decrypt") {
-      throw new Error(`The release word was not accepted for the next release (${release.id}), or its package is damaged.`);
+    writeFileSync(source, "new\n", { flag: "wx" });
+    writeFileSync(destination, "old\n", { flag: "wx" });
+    renameWithRetries(source, destination);
+    if (readFileSync(destination, "utf8") !== "new\n") {
+      throw new Error("The filesystem did not replace the state probe atomically.");
     }
-    if (phase === "activate") {
-      throw new Error(`The release was decrypted but activation did not finish. Retry the same authorized word. ${error.message}`);
-    }
-    throw new Error(`The decrypted release failed validation: ${error.message}`);
+  } finally {
+    removePathWithRetries(source);
+    removePathWithRetries(destination);
   }
+}
+
+function writePreflightReport(paths, lines) {
+  const workspace = join(paths.root, "workspace");
+  mkdirSync(workspace, { recursive: true });
+  const report = join(workspace, "release-preflight-report.txt");
+  const temporary = `${report}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    writeFileSync(temporary, `${lines.join("\n")}\n`, { flag: "wx" });
+    renameWithRetries(temporary, report);
+  } finally {
+    removePathWithRetries(temporary);
+  }
+  return portableRelative(paths.root, report);
+}
+
+export async function repairReleaseWorkspace(kitRoot = DEFAULT_KIT_ROOT) {
+  const paths = kitPaths(kitRoot);
+  const releasePlan = readPlan(paths);
+  const removed = cleanRecoverableTemporaryPaths(paths);
+  const current = readState(paths, releasePlan);
+  if (!current) throw new Error("The H0 starting state is missing; restore a fresh extracted kit.");
+  await verifyReleaseDirectory(join(paths.released, current.release.id), current.release);
+  const next = nextRelease(releasePlan, current);
+  let recoverableRelease = null;
+  if (next && existsSync(join(paths.released, next.id))) {
+    const verified = await verifyReleaseDirectory(join(paths.released, next.id), next);
+    recoverableRelease = next.id;
+    console.log(`A verified ${next.id} directory is ready to recover (${verified.checked} files).`);
+    console.log("Retry the same authorized release word to finish activation.");
+  }
+  console.log(`Release workspace repair passed. Removed temporary paths: ${removed}.`);
+  return { removed, recoverableRelease };
+}
+
+export async function preflightReleaseDecryption(words, kitRoot = DEFAULT_KIT_ROOT, { writeReport = true } = {}) {
+  const paths = kitPaths(kitRoot);
+  const releasePlan = readPlan(paths);
+  const sealedReleases = releasePlan.releases.slice(1);
+  if (!Array.isArray(words) || words.length !== sealedReleases.length) {
+    throw new Error(`Preflight requires ${sealedReleases.length} release words in sequence.`);
+  }
+  for (const word of words) {
+    if (!word || !/^[A-Z]+$/.test(word)) {
+      throw new Error("Each release word must use uppercase letters exactly as displayed.");
+    }
+  }
+
+  const lines = [
+    "Mission Mosaic release decryption preflight",
+    `Timestamp: ${new Date().toISOString()}`,
+    `Platform: ${process.platform} ${process.arch}`,
+    `Node.js: ${process.version}`,
+    `Kit root length: ${paths.root.length} characters`,
+  ];
+  const originalState = readFileSync(paths.state);
+  let reportPath = null;
+  let preflightRoot = null;
+  try {
+    const removed = cleanRecoverableTemporaryPaths(paths);
+    lines.push(`Recoverable temporary paths removed: ${removed}`);
+    const checked = await verifyPackagedFiles(paths.root);
+    lines.push(`Package verification: PASS (${checked.packagedFiles} packaged files)`);
+    filesystemWriteProbe(paths);
+    lines.push("Local write/replace/delete probe: PASS");
+    const filesystem = statfsSync(paths.root);
+    const freeBytes = Number(filesystem.bavail) * Number(filesystem.bsize);
+    lines.push(`Free space before test: ${formatMebibytes(freeBytes)}`);
+    if (freeBytes < 1024 * 1024 * 1024) {
+      throw new Error("At least 1 GiB of free space is required for release preflight and live recovery.");
+    }
+
+    const workspace = join(paths.root, "workspace");
+    mkdirSync(workspace, { recursive: true });
+    preflightRoot = join(workspace, `.release-preflight-${process.pid}-${Date.now()}`);
+    mkdirSync(preflightRoot, { recursive: true });
+
+    for (let index = 0; index < sealedReleases.length; index += 1) {
+      const release = sealedReleases[index];
+      const destination = join(preflightRoot, release.id);
+      mkdirSync(destination, { recursive: true });
+      let extraction;
+      try {
+        extraction = await decryptRelease(words[index], paths, releasePlan, release, destination);
+      } catch (error) {
+        if (isLocalWriteFailure(error)) throw error;
+        throw new Error(`${release.id} could not be authenticated and decrypted. Confirm its authorized word.`, { cause: error });
+      }
+      const verified = await verifyReleaseDirectory(destination, release);
+      const renamedDestination = `${destination}.renamed`;
+      renameWithRetries(destination, renamedDestination);
+      lines.push(
+        `${release.id}: PASS (${verified.checked} verified files, ${formatMebibytes(extraction.extractedBytes)}, ` +
+        `longest local path ${extraction.longestDestination} characters)`,
+      );
+      removePathWithRetries(renamedDestination, { strict: true });
+    }
+
+    if (!readFileSync(paths.state).equals(originalState)) {
+      throw new Error("Preflight changed current-release.json; restore a fresh kit.");
+    }
+    lines.push("Exercise release state unchanged: PASS");
+    lines.push("Overall result: PASS");
+  } catch (error) {
+    lines.push(`Overall result: FAIL${error?.code ? ` (${error.code})` : ""}`);
+    lines.push(`Failure: ${error.message}`);
+    throw Object.assign(error, { preflightLines: lines });
+  } finally {
+    if (preflightRoot) removePathWithRetries(preflightRoot);
+    if (writeReport) {
+      try {
+        reportPath = writePreflightReport(paths, lines);
+      } catch (reportError) {
+        console.error(`Could not write the preflight report: ${reportError.message}`);
+      }
+    }
+    for (const line of lines) console.log(line);
+    if (reportPath) console.log(`Report: ${reportPath}`);
+  }
+  return { reportPath, releasesTested: sealedReleases.length };
+}
+
+async function wordsFromStandardInput(expected) {
+  if (process.stdin.isTTY) {
+    throw new Error("Preflight words must be supplied through standard input. Use the provided platform preflight script.");
+  }
+  process.stdin.setEncoding("utf8");
+  let input = "";
+  for await (const chunk of process.stdin) input += chunk;
+  const words = input.replace(/^\uFEFF/, "").split(/\r?\n/).map((word) => word.trim()).filter(Boolean);
+  if (words.length !== expected) throw new Error(`Expected ${expected} release words on standard input.`);
+  return words;
 }
 
 export class ArchiveExtractor extends Writable {
@@ -510,6 +907,8 @@ export class ArchiveExtractor extends Writable {
     this.hash = null;
     this.ended = false;
     this.files = 0;
+    this.bytes = 0;
+    this.longestDestination = 0;
     this.paths = new Set();
   }
 
@@ -551,8 +950,14 @@ export class ArchiveExtractor extends Writable {
         if (!this.buffer.length) return;
         const count = Math.min(this.remaining, this.buffer.length);
         const slice = this.buffer.subarray(0, count);
-        writeSync(this.fd, slice);
+        let offset = 0;
+        while (offset < slice.length) {
+          const written = writeSync(this.fd, slice, offset, slice.length - offset);
+          if (written <= 0) throw new Error(`Release extraction stopped while writing: ${this.entry.path}`);
+          offset += written;
+        }
         this.hash.update(slice);
+        this.bytes += slice.length;
         this.remaining -= count;
         this.buffer = this.buffer.subarray(count);
         if (this.remaining === 0) {
@@ -588,6 +993,7 @@ export class ArchiveExtractor extends Writable {
       if (this.paths.has(portableKey)) throw new Error(`Duplicate or case-colliding archive path: ${entry.path}`);
       this.paths.add(portableKey);
       const destination = safeDestination(this.root, entry.path);
+      this.longestDestination = Math.max(this.longestDestination, destination.length);
       mkdirSync(dirname(destination), { recursive: true });
       this.fd = openSync(destination, "wx", 0o600);
       this.entry = entry;
@@ -640,21 +1046,44 @@ function printStatus(mode, paths, releasePlan) {
 }
 
 export async function runCli(argv, kitRoot = DEFAULT_KIT_ROOT) {
-  const [command = "status", argument, ...extra] = argv;
-  if (extra.length) throw new Error("Too many command-line arguments.");
+  const [command = "status", ...arguments_] = argv;
+  const [argument, ...extra] = arguments_;
   const paths = kitPaths(kitRoot);
   if (command === "verify") {
+    if (extra.length) throw new Error("Too many command-line arguments.");
     if (argument) throw new Error("The verify command does not accept arguments.");
     const checked = await verifyPackagedFiles(paths.root);
     console.log(`Encrypted Edge Kit verification passed (${checked.packagedFiles} packaged files).`);
     if (checked.activeFiles) console.log(`Active release verification passed (${checked.activeFiles} files).`);
   } else if (command === "status") {
+    if (extra.length) throw new Error("Too many command-line arguments.");
     const releasePlan = readPlan(paths);
     printStatus(argument, paths, releasePlan);
   } else if (command === "unlock") {
-    if (!argument) throw new Error("A release word is required.");
-    await unlockRelease(argument, paths.root);
+    if (extra.length) throw new Error("Too many command-line arguments.");
+    if (!argument) throw facilitatorAssistanceError(new Error("A release word is required."));
+    try {
+      await unlockRelease(argument, paths.root);
+      const checked = await retryTransientAsyncOperation(() => verifyPackagedFiles(paths.root));
+      console.log(`Post-unlock verification passed (${checked.activeFiles} active-release files).`);
+      const releasePlan = readPlan(paths);
+      printStatus(null, paths, releasePlan);
+    } catch (error) {
+      throw facilitatorAssistanceError(error);
+    }
+  } else if (command === "repair") {
+    if (argument) throw new Error("The repair command does not accept arguments.");
+    await repairReleaseWorkspace(paths.root);
+  } else if (command === "preflight") {
+    if (argument !== "--stdin" || extra.length) {
+      throw new Error("Use the provided platform preflight script to supply release words securely.");
+    }
+    const releasePlan = readPlan(paths);
+    const words = await wordsFromStandardInput(releasePlan.releases.length - 1);
+    await preflightReleaseDecryption(words, paths.root);
   } else {
-    throw new Error("Usage: node tools/mosaic-release.mjs verify|status [--json|--database]|unlock WORD");
+    throw new Error(
+      "Usage: node tools/mosaic-release.mjs verify|status [--json|--database]|unlock WORD|repair|preflight --stdin",
+    );
   }
 }

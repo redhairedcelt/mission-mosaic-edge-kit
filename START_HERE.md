@@ -2,8 +2,8 @@
 
 > **FOR TRAINING PURPOSES ONLY — SYNTHETIC DATA**
 
-This is the offline Mission Mosaic participant workspace. It contains a
-plaintext reference library and four encrypted, cumulative evidence releases.
+This is the offline Mission Mosaic participant workspace. It starts with an
+active H0 baseline and contains two encrypted, cumulative evidence updates.
 The facilitator provides one release word at each authorized transition.
 
 ## Confirm that you have the runnable kit
@@ -19,9 +19,9 @@ packages, platform tools, and checksum manifest.
 1. Keep the extracted kit together in a writable folder.
 2. Open that folder in Codex.
 3. Send: `Read and follow prompts/STARTUP_PROMPT.md.`
-4. Wait for package verification and release status.
+4. Wait for package verification and confirmation that H0 is active.
 5. When the facilitator announces a release word, tell Codex to unlock the
-   next release using that word.
+   next release using that word. Codex runs verification and bounded recovery.
 
 Codex runs the same cross-platform Node.js utility on Windows and macOS. A
 successful unlock decrypts and verifies the next release locally, updates
@@ -37,6 +37,11 @@ node tools/mosaic-release.mjs verify
 node tools/mosaic-release.mjs status
 node tools/mosaic-release.mjs unlock WORD
 ```
+
+Facilitators should test the actual decryption path before event day. On
+Windows, run `.\tools\test_release_decryption.ps1`; on macOS, run
+`sh tools/test_release_decryption.sh`. See [`PREFLIGHT.md`](PREFLIGHT.md).
+The test is repeatable and does not advance the active release.
 
 If `verify` identifies a public source checkout, stop and download the
 versioned release asset. Do not try to construct missing package files from the
@@ -62,6 +67,14 @@ Save applications, SQL, reports, charts, and working databases under
 `workspace/`. The unlocked release directories are immutable source material.
 Run `node tools/mosaic-release.mjs verify` again if the extracted kit is moved,
 copied, or reopened later; it also checks the active release when one exists.
+If verification reports an interrupted temporary extraction, run
+`node tools/mosaic-release.mjs repair`, rerun verification, and retry the same
+authorized word.
+
+The `unlock` command itself performs at most one automatic repair and retry for
+a recoverable local error, then verifies and prints the active release. If it
+cannot finish safely, Codex tells the participant to flag the failure for a
+facilitator, who can take over recovery.
 
 ## What happens at each transition
 
@@ -69,14 +82,15 @@ copied, or reopened later; it also checks the active release when one exists.
 |---|---|
 | Facilitator | Announces the authorized word for the next release. |
 | Participant | Gives that word to Codex and explicitly asks it to unlock the next release. |
-| Codex | Runs verification, unlocks only the next release, then reports status. It never guesses or searches for a word. |
+| Codex | Unlocks only the next update, automatically repairs and retries once when safe, verifies the result, then reports status or asks the participant to flag the failure for a facilitator. |
 | Analyst | Uses only the newest active cumulative database and saves all work under `workspace/`. |
 
 ## Important boundaries
 
-- Before the first unlock, no scenario evidence is available.
-- Each package is cumulative, so use the newest active release.
-- H120 is for continued analysis after the facilitated outbrief.
+- H0 is active when the complete release asset is opened.
+- Each update is cumulative, so use the newest active release.
+- H72 is the decision dataset. Save the participant brief before advancing.
+- H120 supports the final application refresh before the facilitated outbrief.
 - The kit never contains facilitator ground truth or exercise-control files.
 - Do not edit anything under `sealed/`, `released/`, or `data/reference/`.
 - Save your work under `workspace/`.
