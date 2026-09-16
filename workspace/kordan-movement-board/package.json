@@ -1,0 +1,15 @@
+{
+  "name": "mission-mosaic-kordan-movement-board-standalone",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Portable offline Kordan military and related civilian vessel movement board.",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test",
+    "export:snapshot": "node tools/export-from-running-board.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

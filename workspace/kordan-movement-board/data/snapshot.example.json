@@ -1,0 +1,56 @@
+{
+  "schema_version": "mission-mosaic-movement-board-snapshot-v1",
+  "exported_at": null,
+  "classification": "FOR TRAINING PURPOSES ONLY — SYNTHETIC DATA",
+  "example_data": true,
+  "source_release": {
+    "activeRelease": "NO-SNAPSHOT",
+    "cutoffHour": 0,
+    "database": null
+  },
+  "views": {
+    "120": {
+      "dashboard": {
+        "generated_at": null,
+        "release": {
+          "active": {
+            "activeRelease": "NO-SNAPSHOT",
+            "label": "No portable participant snapshot loaded",
+            "cutoffHour": 0,
+            "database": null
+          },
+          "nextRelease": null
+        },
+        "filters": { "start": 0, "end": 0, "window": 120, "cutoff": 0 },
+        "metrics": {
+          "tracked_vessels": 0,
+          "military_hulls": 0,
+          "related_civilians": 0,
+          "other_vessels": 0,
+          "agent_findings": 0,
+          "source_reports": 0
+        },
+        "vessels": [],
+        "feed": [],
+        "activity": [],
+        "facilities": [],
+        "analytic_status": {
+          "assessment_release": null,
+          "assessment_cutoff_hour": null,
+          "stale": false,
+          "basis": "No participant analytic snapshot is loaded."
+        },
+        "method_notes": {
+          "snapshot": "Generate data/snapshot.json only from an authorized local release-aware board.",
+          "availability": "A portable export preserves the source board's ingest-hour availability cutoff and observation-hour activity window.",
+          "boundary": "Snapshots are participant data and must not be published or used to bypass release controls."
+        },
+        "training_data": true,
+        "classification": "FOR TRAINING PURPOSES ONLY — SYNTHETIC DATA"
+      },
+      "tracks": []
+    }
+  },
+  "map": { "type": "FeatureCollection", "features": [] },
+  "evidence": {}
+}

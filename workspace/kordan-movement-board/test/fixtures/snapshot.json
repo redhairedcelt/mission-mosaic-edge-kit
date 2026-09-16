@@ -1,0 +1,27 @@
+{
+  "schema_version": "mission-mosaic-movement-board-snapshot-v1",
+  "exported_at": "2026-09-16T00:00:00.000Z",
+  "classification": "FOR TRAINING PURPOSES ONLY — SYNTHETIC DATA",
+  "source_release": { "activeRelease": "REL-TEST-01", "cutoffHour": 12, "database": null },
+  "views": {
+    "120": {
+      "dashboard": {
+        "release": { "active": { "activeRelease": "REL-TEST-01", "label": "Test", "cutoffHour": 12 }, "nextRelease": null },
+        "filters": { "start": 0, "end": 12, "window": 120, "cutoff": 12 },
+        "metrics": { "tracked_vessels": 1, "military_hulls": 0, "related_civilians": 1, "other_vessels": 0, "agent_findings": 0, "source_reports": 0 },
+        "vessels": [], "feed": [], "activity": [], "facilities": [],
+        "analytic_status": { "basis": "Test fixture", "stale": false },
+        "method_notes": { "fixture": "Test fixture" },
+        "training_data": true,
+        "classification": "FOR TRAINING PURPOSES ONLY — SYNTHETIC DATA"
+      },
+      "tracks": [
+        { "record_id": "AIS-TEST-001", "mmsi": "MMSI-TEST", "vessel_name": "MV Test", "observation_hour": 12, "latitude": -10, "longitude": 64 }
+      ]
+    }
+  },
+  "map": { "type": "FeatureCollection", "features": [] },
+  "evidence": {
+    "AIS-TEST-001": { "identifier": "AIS-TEST-001", "family": "AIS observation", "record": { "record_id": "AIS-TEST-001", "vessel_name": "MV Test" }, "release": "REL-TEST-01" }
+  }
+}

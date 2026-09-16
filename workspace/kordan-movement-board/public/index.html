@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Kordan Movement Board</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="training-strip">SYNTHETIC TRAINING DATA <span>•</span> PARTICIPANT ANALYTIC AID <span>•</span> NOT FACILITATOR TRUTH</div>
+
+  <div class="app-grid">
+    <aside class="left-rail" aria-label="Movement board navigation">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true">KM</div>
+        <div>
+          <h1>Kordan Movement Board</h1>
+          <p>Evidence-backed maritime watch</p>
+        </div>
+      </div>
+
+      <nav class="primary-nav" aria-label="Primary views">
+        <button class="nav-button active" type="button" data-jump="board"><span aria-hidden="true">⌂</span> Board</button>
+        <button class="nav-button" type="button" data-jump="map"><span aria-hidden="true">⌖</span> Movement map</button>
+        <button class="nav-button" type="button" data-jump="watchlist"><span aria-hidden="true">◎</span> Vessel watch</button>
+        <button class="nav-button" type="button" data-jump="method"><span aria-hidden="true">≡</span> Method notes</button>
+      </nav>
+
+      <section class="rail-section" aria-labelledby="filters-heading">
+        <div class="section-kicker">Display scope</div>
+        <h2 id="filters-heading">Track filters</h2>
+        <label class="search-field">
+          <span class="sr-only">Search vessels and posts</span>
+          <input id="search-input" type="search" placeholder="Search board">
+        </label>
+        <div class="scope-filters">
+          <label><input type="checkbox" value="military" checked> Kordan military <span id="military-filter-count">0</span></label>
+          <label><input type="checkbox" value="related_civilian" checked> Related civilian <span id="related-filter-count">0</span></label>
+          <label><input type="checkbox" value="civilian"> Other civilian <span id="civilian-filter-count">0</span></label>
+          <label><input type="checkbox" value="coast_guard"> Coast guard <span id="coast-filter-count">0</span></label>
+        </div>
+      </section>
+
+      <section class="rail-section time-section" aria-labelledby="time-heading">
+        <div class="section-kicker">Temporal controls</div>
+        <h2 id="time-heading">Evidence window</h2>
+        <label for="window-select">Observation history</label>
+        <select id="window-select">
+          <option value="48">Last 48 hours</option>
+          <option value="72">Last 72 hours</option>
+          <option value="120" selected>H0 through H+120</option>
+          <option value="456">Full 19-day track</option>
+        </select>
+        <p>Availability cutoff: <strong id="cutoff-label">H+120</strong></p>
+        <p>Activity window: <strong id="window-label">H+0–H+120</strong></p>
+      </section>
+
+      <div class="rail-footer">
+        <div id="connection" class="connection"><span></span> Connecting…</div>
+        <button id="refresh-button" class="outline-button" type="button">Reload snapshot</button>
+      </div>
+    </aside>
+
+    <main id="board" class="board-column">
+      <header class="board-header">
+        <div>
+          <div class="section-kicker">Active watch</div>
+          <h2>Movement board</h2>
+        </div>
+        <div class="release-chip"><span id="release-dot"></span><strong id="release-id">Loading</strong><small id="release-label">release state</small></div>
+      </header>
+
+      <section class="board-tabs" aria-label="Feed filter">
+        <button type="button" class="feed-tab active" data-feed="all">For you</button>
+        <button type="button" class="feed-tab" data-feed="agent">Agent findings</button>
+        <button type="button" class="feed-tab" data-feed="source">Source reports</button>
+      </section>
+
+      <section id="map" class="map-card" aria-labelledby="map-heading">
+        <div class="map-card-header">
+          <div>
+            <div class="section-kicker">Observation geometry</div>
+            <h2 id="map-heading">Kordan maritime movement</h2>
+          </div>
+          <div class="map-actions">
+            <button id="fit-button" type="button">Fit tracks</button>
+            <button id="map-collapse" type="button" aria-expanded="true">Collapse</button>
+          </div>
+        </div>
+        <div id="map-wrap" class="map-wrap">
+          <canvas id="movement-map" aria-label="Map of released vessel tracks around Kordan"></canvas>
+          <div class="map-watermark">SYNTHETIC TRAINING DATA</div>
+          <div id="map-tooltip" class="map-tooltip" hidden></div>
+          <div id="map-status" class="map-status">Loading released tracks…</div>
+          <div class="map-legend" aria-label="Map legend">
+            <span><i class="legend-line military"></i> Military hull</span>
+            <span><i class="legend-line related"></i> Related civilian</span>
+            <span><i class="legend-dot latest"></i> Latest report</span>
+          </div>
+        </div>
+        <div class="activity-ribbon">
+          <div><span>Window</span><strong id="map-window">H+0 → H+120</strong></div>
+          <div><span>Visible tracks</span><strong id="visible-track-count">0</strong></div>
+          <div><span>Selected</span><strong id="map-selected">All scoped vessels</strong></div>
+          <div><span>Availability</span><strong id="map-cutoff">Ingest ≤ H+120</strong></div>
+        </div>
+      </section>
+
+      <section id="feed" class="feed" aria-live="polite" aria-busy="true">
+        <div class="loading-post">Building the release-aware evidence board…</div>
+      </section>
+    </main>
+
+    <aside class="right-rail" aria-label="Current picture and watch list">
+      <section class="picture-card">
+        <div class="section-kicker">At a glance</div>
+        <h2>Current picture</h2>
+        <div class="metric-grid">
+          <div><strong id="metric-military">—</strong><span>matched military hulls</span></div>
+          <div><strong id="metric-related">—</strong><span>related civilian tracks</span></div>
+          <div><strong id="metric-findings">—</strong><span>agent findings</span></div>
+          <div><strong id="metric-reports">—</strong><span>source reports</span></div>
+        </div>
+        <p id="picture-summary" class="picture-summary">Waiting for active release data.</p>
+      </section>
+
+      <section id="watchlist" class="watch-card">
+        <div class="card-heading">
+          <div>
+            <div class="section-kicker">Tracked identities</div>
+            <h2>Vessel watch</h2>
+          </div>
+          <span id="watch-count">0</span>
+        </div>
+        <div id="vessel-list" class="vessel-list"></div>
+      </section>
+
+      <section id="selected-vessel" class="selected-card" hidden>
+        <div class="section-kicker">Selected track</div>
+        <h2 id="selected-name"></h2>
+        <p id="selected-id" class="mono"></p>
+        <dl id="selected-details" class="detail-list"></dl>
+        <button id="selected-evidence" class="outline-button full" type="button">Open latest AIS record</button>
+      </section>
+
+      <details id="method" class="method-card">
+        <summary>Method &amp; analytic boundaries</summary>
+        <div id="method-notes"></div>
+      </details>
+    </aside>
+  </div>
+
+  <dialog id="evidence-dialog">
+    <div class="dialog-header">
+      <div>
+        <div id="evidence-family" class="section-kicker">Evidence</div>
+        <h2 id="evidence-title">Record detail</h2>
+      </div>
+      <button id="dialog-close" type="button" aria-label="Close evidence detail">×</button>
+    </div>
+    <div id="evidence-body" class="evidence-body"></div>
+  </dialog>
+
+  <template id="post-template">
+    <article class="post">
+      <div class="post-avatar" aria-hidden="true"></div>
+      <div class="post-main">
+        <header class="post-header">
+          <div class="post-byline"><strong class="post-agent"></strong><span class="verified" aria-label="Analytic account">✓</span><span class="post-handle"></span><span>·</span><time class="post-time"></time></div>
+          <span class="post-kind"></span>
+        </header>
+        <div class="post-role"></div>
+        <h3 class="post-title"></h3>
+        <p class="post-judgment"></p>
+        <div class="confidence-row" hidden></div>
+        <div class="post-expansion" hidden>
+          <section class="reason-block observations"><h4>Observations</h4><ul></ul></section>
+          <section class="reason-block inference"><h4>Inference</h4><p></p></section>
+          <section class="reason-block alternatives"><h4>Alternatives</h4><ul></ul></section>
+          <section class="reason-block gaps"><h4>Gaps &amp; limits</h4><ul></ul></section>
+        </div>
+        <div class="evidence-row"></div>
+        <footer class="post-actions">
+          <button type="button" class="expand-post">View reasoning</button>
+          <span class="time-lineage"></span>
+        </footer>
+      </div>
+    </article>
+  </template>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
